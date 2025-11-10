@@ -1,0 +1,301 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Forecast Dashboard — Interactive v4 (Enhanced Heatmap Colors)</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    :root{
+      --blue:#2563EB; --green:#16a34a; --orange:#ea580c; --yellow:#f59e0b;
+      --surplus:#2563EB;  /* blue */
+      --balanced:#6b7280; /* gray-500 */
+      --shortage:#dc2626; /* red-600 */
+      --bg:#0f1115; --panel:#151923; --text:#e8eaf0; --muted:#aab2c0;
+      --accent:#2a2f3a; --card:#111522; --border:#262b36;
+    }
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    .wrap{max-width:1280px;margin:24px auto;padding:0 16px;}
+    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+    h1{margin:0;font-size:26px;}
+    .badges{display:flex;gap:8px;flex-wrap:wrap}
+    .badge{padding:6px 10px;border-radius:12px;font-weight:600;color:#0a0a0a}
+    .b-blue{background:var(--blue)} .b-green{background:var(--green)} .b-orange{background:var(--orange)} .b-yellow{background:var(--yellow)}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:0 4px 16px #00000040;}
+    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .controls label{font-size:12px;color:var(--muted)}
+    select,button{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+    button{cursor:pointer}
+    button.primary{background:linear-gradient(135deg,var(--blue),var(--green));border:0}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media (min-width: 980px){ .grid{grid-template-columns: 1fr 1fr;} }
+    .chart{height:460px}
+    .hint{color:var(--muted);font-size:13px;line-height:1.6}
+    .bookmark-list{display:flex;gap:8px;flex-wrap:wrap;margin-left:8px}
+    .pill{border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:var(--accent);cursor:pointer}
+    .pill:hover{filter:brightness(1.1)}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+    .kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px}
+    .kpi .v{font-size:22px;font-weight:700}
+    .row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+    .row .right{display:flex;gap:8px;align-items:center}
+    .toggler{display:inline-flex;gap:6px;align-items:center}
+    .toggler input{accent-color:var(--blue)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>Forecast Dashboard — Interactive v4</h1>
+      <div class="badges">
+        <div class="badge b-blue">SSD</div>
+        <div class="badge b-green">DRAM</div>
+        <div class="badge b-orange">HDD</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="controls">
+          <div>
+            <label>Product Type</label><br/>
+            <select id="typeFilter">
+              <option value="ALL">ALL</option>
+              <option>SSD</option><option>DRAM</option><option>HDD</option>
+            </select>
+          </div>
+          <div>
+            <label>Vendor</label><br/>
+            <select id="vendorFilter">
+              <option value="ALL">ALL</option>
+              <option>Samsung</option><option>Micron</option><option>SK Hynix</option><option>Western Digital</option>
+            </select>
+          </div>
+          <div>
+            <label>Generation</label><br/>
+            <select id="genFilter">
+              <option value="ALL">ALL</option>
+              <option>Gen1</option><option>Gen2</option><option>Gen3</option>
+            </select>
+          </div>
+          <button class="primary" id="saveBm">Save Bookmark</button>
+          <div id="bmList" class="bookmark-list"></div>
+        </div>
+        <div class="right">
+          <label class="toggler"><input type="checkbox" id="autoScale" checked/> Auto-threshold</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis">
+      <div class="kpi"><div>Total Demand</div><div class="v" id="kpiDemand">—</div></div>
+      <div class="kpi"><div>Total Supply</div><div class="v" id="kpiSupply">—</div></div>
+      <div class="kpi"><div>Fulfillment</div><div class="v" id="kpiFill">—</div></div>
+      <div class="kpi"><div>Shortage Categories</div><div class="v" id="kpiShort">—</div></div>
+    </div>
+
+    <div class="grid">
+      <div class="panel"><div id="lineChart" class="chart" aria-label="Weekly Trends"></div></div>
+      <div class="panel"><div id="heatmap" class="chart" aria-label="Category Heatmap"></div></div>
+    </div>
+
+    <div class="panel"><div class="hint">
+      The heatmap now uses a diverging scheme: <b>Shortage=Red</b>, <b>Near zero=Gray</b>, <b>Surplus=Blue</b>.
+      Enable <b>Auto-threshold</b> to compute cutoffs from current filtered data percentiles for better contrast; disable it to use fixed thresholds.
+    </div></div>
+  </div>
+
+  <script>
+    const PAL={blue:'#2563EB',green:'#16a34a',orange:'#ea580c',yellow:'#f59e0b'};
+    const HEAT={ surplus:'#2563EB', balanced:'#6b7280', shortage:'#dc2626'};
+
+    function seedRand(seed){ let h=0; for(let i=0;i<seed.length;i++) h=(h*31 + seed.charCodeAt(i))|0;
+      return ()=>{ h ^= h<<13; h ^= h>>17; h ^= h<<5; return ((h>>>0)%1000)/1000; };
+    }
+
+    const TYPES=['SSD','DRAM','HDD'];
+    const VENDORS=['Samsung','Micron','SK Hynix','Western Digital'];
+    const GENS=['Gen1','Gen2','Gen3'];
+    const SIZES=['16GB','32GB','64GB','128GB'];
+    const CATS=[]; let id=1;
+    for(const t of TYPES){ for(const g of GENS){ for(const v of VENDORS){ for(const s of SIZES){
+      if(CATS.length>=32) break;
+      CATS.push({ id:id++, name:`${t} ${s} ${g} - ${v}`, type:t, vendor:v, gen:g });
+    } if(CATS.length>=32) break;} if(CATS.length>=32) break;} if(CATS.length>=32) break; }
+    const WEEKS=Array.from({length:52},(_,i)=>i+1);
+
+    const CAT_TS={};
+    for(const c of CATS){
+      const r=seedRand(c.name);
+      const base=(c.type==='SSD'?1600:(c.type==='DRAM'?1200:1400))
+        *(c.gen==='Gen1'?0.9:(c.gen==='Gen2'?1.0:1.1))
+        *(c.vendor==='Samsung'?1.05:(c.vendor==='Micron'?1.0:(c.vendor==='SK Hynix'?0.98:1.02)));
+      const dem=WEEKS.map(w=>Math.round(base+180*Math.sin(w/3+(r()*2))+(r()-0.5)*120));
+      const sup=dem.map((d,i)=>Math.round(d*(0.93+0.08*Math.sin(i/5+r()*2))));
+      CAT_TS[c.id]={demand:dem,supply:sup};
+    }
+
+    function filterCats(type,vendor,gen){
+      return CATS.filter(c => (type==='ALL'||c.type===type)
+        && (vendor==='ALL'||c.vendor===vendor)
+        && (gen==='ALL'||c.gen===gen));
+    }
+    function sumSeries(cats){
+      const demand=Array(52).fill(0), supply=Array(52).fill(0);
+      for(const c of cats){ const ts=CAT_TS[c.id]; for(let i=0;i<52;i++){ demand[i]+=ts.demand[i]; supply[i]+=ts.supply[i]; } }
+      return {demand,supply};
+    }
+    function kpisFromCats(cats){
+      const ts=sumSeries(cats);
+      const totalDemand=ts.demand.reduce((a,b)=>a+b,0);
+      const totalSupply=ts.supply.reduce((a,b)=>a+b,0);
+      const fill=totalDemand?totalSupply/totalDemand:0;
+      let short=0; for(const c of cats){ const t=CAT_TS[c.id]; if(t.supply.some((v,i)=>v<t.demand[i])) short++; }
+      return { totalDemand,totalSupply,fill,short };
+    }
+
+    const lineChart=echarts.init(document.getElementById('lineChart'));
+    const heatmap=echarts.init(document.getElementById('heatmap'));
+
+    function buildLineOption(typeSel,vendorSel,genSel){
+      const types=(typeSel==='ALL'?TYPES:[typeSel]);
+      const series=[];
+      for(const t of types){
+        const cats=filterCats(t,vendorSel,genSel);
+        const agg=sumSeries(cats);
+        const color=t==='SSD'?PAL.blue:(t==='DRAM'?PAL.green:PAL.orange);
+        series.push({name:`${t} Demand`,type:'line',smooth:true,lineStyle:{width:3},itemStyle:{color},data:agg.demand});
+        series.push({name:`${t} Supply`,type:'line',smooth:true,lineStyle:{width:2,type:'dashed'},itemStyle:{color:echarts.color.lift(color,0.2)},data:agg.supply});
+      }
+      return {
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'}},
+        legend:{top:0,textStyle:{color:'#e8eaf0'}},
+        grid:{left:44,right:18,top:40,bottom:62},
+        xAxis:{type:'category',data:WEEKS,name:'Week',nameTextStyle:{color:'#aab2c0'},axisLabel:{color:'#aab2c0'}},
+        yAxis:{type:'value',name:'Qty',nameTextStyle:{color:'#aab2c0'},axisLabel:{color:'#aab2c0'},splitLine:{lineStyle:{color:'#2a2f3a'}}},
+        dataZoom:[{type:'inside',throttle:50},{type:'slider',height:18,bottom:24}],
+        series
+      };
+    }
+
+    function percentile(arr, p){
+      if(!arr.length) return 0;
+      const sorted=[...arr].sort((a,b)=>a-b);
+      const idx=(sorted.length-1)*p;
+      const lo=Math.floor(idx), hi=Math.ceil(idx);
+      if(lo===hi) return sorted[lo];
+      return sorted[lo]*(hi-idx)+sorted[hi]*(idx-lo);
+    }
+
+    function buildHeatOption(typeSel,vendorSel,genSel){
+      const cats=filterCats(typeSel,vendorSel,genSel);
+      const yCats=cats.map(c=>c.name);
+      const gaps=[]; const data=[];
+      cats.forEach((c,r)=>{
+        const ts=CAT_TS[c.id];
+        for(let i=0;i<52;i++){
+          const g = ts.supply[i]-ts.demand[i];
+          gaps.push(g);
+          data.push([i, r, g]);
+        }
+      });
+
+      // thresholds: either auto (percentiles) or fixed
+      const auto=document.getElementById('autoScale').checked;
+      let neg2, neg1, pos1, pos2;
+      if(auto){
+        neg2 = percentile(gaps, 0.10);
+        neg1 = percentile(gaps, 0.35);
+        pos1 = percentile(gaps, 0.65);
+        pos2 = percentile(gaps, 0.90);
+      }else{
+        neg2 = -800; neg1 = -200; pos1 = 200; pos2 = 800;
+      }
+
+      return {
+        tooltip:{trigger:'item',formatter:p=>{
+          const w=WEEKS[p.data[0]], cat=yCats[p.data[1]], gap=p.data[2];
+          const st= gap<0?'Shortage':(gap>0?'Surplus':'Balanced');
+          return `<b>${cat}</b><br/>Week ${w}<br/>Gap: ${gap} (${st})`;
+        }},
+        grid:{left:180,right:20,top:30,bottom:40},
+        xAxis:{type:'category',data:WEEKS.map(String),name:'Week',nameTextStyle:{color:'#aab2c0'},
+               axisLabel:{color:'#aab2c0'},splitArea:{show:true}},
+        yAxis:{type:'category',data:yCats,name:'Category',nameTextStyle:{color:'#aab2c0'},
+               axisLabel:{color:'#aab2c0'},splitArea:{show:true}},
+        visualMap: {
+          type: 'piecewise',
+          left: 'center', bottom: 0, orient:'horizontal', textStyle:{color:'#e8eaf0'},
+          pieces: [
+            {min: Number.NEGATIVE_INFINITY, max: neg2, label: `< ${neg2}`, color: HEAT.shortage},
+            {min: neg2, max: neg1, label: `${Math.round(neg2)} to ${Math.round(neg1)}`, color: '#f87171'},
+            {min: neg1, max: pos1, label: `${Math.round(neg1)} to ${Math.round(pos1)}`, color: HEAT.balanced},
+            {min: pos1, max: pos2, label: `${Math.round(pos1)} to ${Math.round(pos2)}`, color: '#60a5fa'},
+            {min: pos2, max: Number.POSITIVE_INFINITY, label: `> ${pos2}`, color: HEAT.surplus},
+          ]
+        },
+        series:[{name:'Gap Heatmap',type:'heatmap',data,
+          emphasis:{itemStyle:{shadowBlur:10,shadowColor:'rgba(0,0,0,.45)'}}}]
+      };
+    }
+
+    const selType=document.getElementById('typeFilter');
+    const selVendor=document.getElementById('vendorFilter');
+    const selGen=document.getElementById('genFilter');
+    const kpiDemand=document.getElementById('kpiDemand');
+    const kpiSupply=document.getElementById('kpiSupply');
+    const kpiFill=document.getElementById('kpiFill');
+    const kpiShort=document.getElementById('kpiShort');
+    const autoScale=document.getElementById('autoScale');
+
+    function refresh(){
+      lineChart.setOption(buildLineOption(selType.value, selVendor.value, selGen.value), true);
+      heatmap.setOption(buildHeatOption(selType.value, selVendor.value, selGen.value), true);
+      const cats=filterCats(selType.value, selVendor.value, selGen.value);
+      const k=kpisFromCats(cats);
+      kpiDemand.textContent=k.totalDemand.toLocaleString();
+      kpiSupply.textContent=k.totalSupply.toLocaleString();
+      kpiFill.textContent=(k.fill*100).toFixed(1)+'%';
+      kpiShort.textContent=k.short.toString();
+    }
+
+    heatmap.on('mouseover', p=>{ const i=p.data[0]; lineChart.dispatchAction({type:'showTip',seriesIndex:0,dataIndex:i}); });
+    function clickDetail(params){
+      const week=params.name || (params.dataIndex+1);
+      const series=params.seriesName || 'All';
+      alert(`Go to detail page\nSeries: ${series}\nWeek: ${week}\nFilters: ${selType.value}/${selVendor.value}/${selGen.value}`);
+    }
+    lineChart.on('click', clickDetail);
+    heatmap.on('click', clickDetail);
+
+    // Bookmarks v4
+    const BM_KEY='forecast_bms_v4';
+    const saveBtn=document.getElementById('saveBm');
+    const bmList=document.getElementById('bmList');
+    function loadBms(){ try{return JSON.parse(localStorage.getItem(BM_KEY)||'[]')}catch(e){return []} }
+    function renderBms(){
+      bmList.innerHTML='';
+      for(const bm of loadBms()){
+        const pill=document.createElement('div'); pill.className='pill'; pill.textContent=bm.name;
+        pill.title=`type=${bm.filters.type} | vendor=${bm.filters.vendor} | gen=${bm.filters.gen} | auto=${bm.filters.auto?'on':'off'}`;
+        pill.onclick=()=>{ selType.value=bm.filters.type; selVendor.value=bm.filters.vendor; selGen.value=bm.filters.gen; autoScale.checked=!!bm.filters.auto; refresh(); };
+        bmList.appendChild(pill);
+      }
+    }
+    saveBtn.addEventListener('click', ()=>{
+      const name=prompt('Bookmark name'); if(!name) return;
+      const bms=loadBms(); bms.push({name, filters:{type:selType.value, vendor:selVendor.value, gen:selGen.value, auto:autoScale.checked}});
+      localStorage.setItem(BM_KEY, JSON.stringify(bms)); renderBms();
+    });
+
+    selType.addEventListener('change', refresh);
+    selVendor.addEventListener('change', refresh);
+    selGen.addEventListener('change', refresh);
+    autoScale.addEventListener('change', refresh);
+
+    renderBms(); refresh();
+    window.addEventListener('resize', ()=>{ lineChart.resize(); heatmap.resize(); });
+  </script>
+</body>
+</html>
