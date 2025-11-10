@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project Tracker – Fabric / Power BI Style (HTML Demo)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --card: 0 0% 100%; --muted: 210 20% 98%; }
+    html, body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    .card { background: white; border-radius: 1rem; box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+    .chip { border: 1px solid rgba(0,0,0,.08); padding: 2px 8px; border-radius: 9999px; font-size: 12px; }
+    .status-ont { background:#ECFDF5; color:#065F46; }
+    .status-risk { background:#FFFBEB; color:#92400E; }
+    .status-blk { background:#FEF2F2; color:#991B1B; }
+    .kbd { background: #111827; color:#fff; border-radius: 6px; padding:2px 6px; font-size:12px; }
+    .bar { height: 14px; border-radius: 9999px; }
+    .bar-ont { background: #22c55e; }
+    .bar-risk { background: #f59e0b; }
+    .bar-blk { background: #ef4444; }
+    .scroll-slim::-webkit-scrollbar { height: 8px; width: 8px; }
+    .scroll-slim::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+    .link { color:#2563eb; }
+    .btn { display:inline-flex; align-items:center; gap:.5rem; border-radius: .75rem; padding:.6rem .9rem; font-weight:600; border:1px solid rgba(0,0,0,.08);
+      background: white; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+    .btn:hover { background:#F8FAFC; }
+    .btn-primary { background:#1d4ed8; color:white; border-color:transparent; }
+    .btn-primary:hover { background:#1e40af; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body class="bg-slate-50">
+  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-bold">PB</div>
+        <div>
+          <h1 class="text-xl font-bold">Project Tracker – Interactive (HTML Demo)</h1>
+          <p class="text-xs text-slate-500">Fabric/Power BI–style prototype • All-English UI • Comment + Forward (write-back via localStorage)</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnExec" class="btn" title="Executive View">Executive view</button>
+        <button id="btnDeep" class="btn" title="Project Deep Dive">Project deep dive</button>
+        <button id="btnReset" class="btn" title="Reset Demo">Reset demo</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4">
+    <!-- Filters / Slicers -->
+    <section class="grid lg:grid-cols-6 gap-4 mb-4">
+      <div class="card p-4 lg:col-span-2">
+        <label class="text-xs text-slate-500">Project</label>
+        <select id="slProject" class="mt-1 w-full rounded-xl border-slate-200 focus:ring-blue-600 focus:border-blue-600">
+        </select>
+      </div>
+      <div class="card p-4">
+        <label class="text-xs text-slate-500">Owner</label>
+        <select id="slOwner" class="mt-1 w-full rounded-xl border-slate-200"></select>
+      </div>
+      <div class="card p-4">
+        <label class="text-xs text-slate-500">Status</label>
+        <select id="slStatus" class="mt-1 w-full rounded-xl border-slate-200">
+          <option value="">All</option>
+          <option>On Track</option>
+          <option>At Risk</option>
+          <option>Blocked</option>
+          <option>Complete</option>
+        </select>
+      </div>
+      <div class="card p-4 lg:col-span-2">
+        <label class="text-xs text-slate-500">Category</label>
+        <select id="slCategory" class="mt-1 w-full rounded-xl border-slate-200"></select>
+      </div>
+    </section>
+
+    <!-- KPI Cards -->
+    <section id="secKpi" class="grid md:grid-cols-4 gap-4 mb-6">
+      <div class="card p-5">
+        <div class="text-slate-500 text-xs">Projects On Track</div>
+        <div id="kpiOnTrack" class="text-3xl font-extrabold">0</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-slate-500 text-xs">Projects At Risk</div>
+        <div id="kpiAtRisk" class="text-3xl font-extrabold">0</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-slate-500 text-xs">Projects Blocked</div>
+        <div id="kpiBlocked" class="text-3xl font-extrabold">0</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-slate-500 text-xs">Avg % Complete</div>
+        <div id="kpiPct" class="text-3xl font-extrabold">0%</div>
+      </div>
+    </section>
+
+    <!-- Two columns: Timeline + Comments/Writeback -->
+    <section class="grid lg:grid-cols-3 gap-6 items-start">
+      <!-- Timeline / Gantt-like -->
+      <div class="card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-bold text-lg">Timeline</h2>
+          <div class="text-xs text-slate-500" id="lblDateRange">Date range</div>
+        </div>
+        <div id="timeline" class="space-y-4 overflow-x-auto scroll-slim pb-2"></div>
+      </div>
+
+      <!-- Comments & Actions -->
+      <div class="space-y-6">
+        <div class="card p-5">
+          <h3 class="font-bold mb-3">Add a Comment</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs text-slate-500">Project ID</label>
+              <input id="tbProjectID" class="w-full rounded-xl border-slate-200" readonly />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Comment</label>
+              <textarea id="tbComment" rows="3" class="w-full rounded-xl border-slate-200" placeholder="Type your suggestion…"></textarea>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Tagged emails (semicolon-separated)</label>
+              <input id="tbEmails" class="w-full rounded-xl border-slate-200" placeholder="alice@contoso.com; bob@contoso.com" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-500">Your name</label>
+                <input id="tbAuthor" class="w-full rounded-xl border-slate-200" placeholder="Your display name" />
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Channel for forward</label>
+                <select id="slChannel" class="w-full rounded-xl border-slate-200">
+                  <option>Email</option>
+                  <option>Teams</option>
+                  <option>None</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex items-center justify-between pt-1">
+              <button id="btnSubmit" class="btn-primary btn">Submit comment</button>
+              <div class="text-xs text-slate-500">Simulated write-back → <span class="kbd">localStorage</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold">Recent Comments</h3>
+            <input id="tbSearch" class="rounded-xl border-slate-200" placeholder="Search comments" />
+          </div>
+          <div id="comments" class="divide-y"></div>
+        </div>
+
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold">Forwards Log</h3>
+            <button id="btnClearForwards" class="btn">Clear log</button>
+          </div>
+          <div id="forwards" class="divide-y"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <template id="tplTimelineRow">
+    <div class="grid grid-cols-12 gap-3 items-center">
+      <div class="col-span-3 min-w-[180px]">
+        <div class="font-medium"></div>
+        <div class="text-xs text-slate-500"></div>
+      </div>
+      <div class="col-span-9">
+        <div class="w-full bg-slate-100 rounded-full h-3 relative">
+          <div class="bar absolute top-0 left-0"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+          <span class="start"></span>
+          <span class="target"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tplCommentRow">
+    <div class="py-3 flex items-start justify-between gap-3">
+      <div>
+        <div class="text-sm"><span class="font-semibold author"></span> <span class="text-slate-400">commented</span></div>
+        <div class="text-sm comment break-words max-w-[36ch]"></div>
+        <div class="text-xs text-slate-500 mt-1">On <span class="pid"></span> • <span class="dt"></span> • <span class="emails"></span></div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button class="btn forward">Forward</button>
+        <span class="text-xs chip">ID: <span class="cid"></span></span>
+      </div>
+    </div>
+  </template>
+
+  <template id="tplForwardRow">
+    <div class="py-3 flex items-start justify-between">
+      <div>
+        <div class="text-sm"><span class="font-semibold">Sent</span> via <span class="channel"></span> to <span class="to"></span></div>
+        <div class="text-xs text-slate-500">Project <span class="pid"></span> • Comment <span class="cid"></span> • <span class="dt"></span></div>
+      </div>
+      <div class="text-xs chip">ID: <span class="fid"></span></div>
+    </div>
+  </template>
+
+  <script>
+    // ------- Demo Seed Data (Projects) -------
+    const seedProjects = [
+      { ProjectID:"P-1000", ProjectName:"Edge Cache Upgrade", Owner:"A. Patel", Category:"Network", Status:"On Track", StartDate:"2025-07-01", TargetDate:"2026-01-31", PercentComplete:72 },
+      { ProjectID:"P-1001", ProjectName:"DRAM Lifecycle", Owner:"J. Chen", Category:"Memory", Status:"At Risk", StartDate:"2025-07-16", TargetDate:"2026-02-14", PercentComplete:54 },
+      { ProjectID:"P-1002", ProjectName:"SSD Gen-5 Ramp", Owner:"L. Gomez", Category:"Storage", Status:"On Track", StartDate:"2025-07-31", TargetDate:"2026-02-28", PercentComplete:63 },
+      { ProjectID:"P-1003", ProjectName:"HDD Buffer Rebalance", Owner:"S. Rivera", Category:"Storage", Status:"Blocked", StartDate:"2025-08-15", TargetDate:"2026-03-14", PercentComplete:38 },
+      { ProjectID:"P-1004", ProjectName:"Vendor Consolidation", Owner:"M. Lee", Category:"Sourcing", Status:"Complete", StartDate:"2025-08-30", TargetDate:"2026-03-28", PercentComplete:96 },
+      { ProjectID:"P-1005", ProjectName:"IBP Data Pipeline", Owner:"K. Nguyen", Category:"Analytics", Status:"At Risk", StartDate:"2025-09-14", TargetDate:"2026-04-11", PercentComplete:47 },
+      { ProjectID:"P-1006", ProjectName:"CapEx Council Prep", Owner:"R. Shah", Category:"Finance", Status:"On Track", StartDate:"2025-09-29", TargetDate:"2026-04-25", PercentComplete:58 },
+      { ProjectID:"P-1007", ProjectName:"Stratus Swap Pilot", Owner:"B. Martin", Category:"Program", Status:"On Track", StartDate:"2025-10-14", TargetDate:"2026-05-09", PercentComplete:41 }
+    ];
+
+    // ------- Local Storage Helpers -------
+    const LS_KEYS = { proj:"pbi_demo_projects", cmts:"pbi_demo_comments", fwd:"pbi_demo_forwards" };
+    const getLS = (k, fallback=[]) => JSON.parse(localStorage.getItem(k) || JSON.stringify(fallback));
+    const setLS = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+    // ------- Seed Comments & Forwards for Demo -------
+    const seedComments = [
+      { CommentID:"C-100", ProjectID:"P-1002", CommentText:"Please review the BOM category mapping before next refresh.", Author:"Sudha", TaggedEmails:"ops-team@contoso.com", CreatedAt:"2025-09-06T10:12:00" },
+      { CommentID:"C-101", ProjectID:"P-1003", CommentText:"QA flagged a mismatch between EDD and capcouncil date fields.", Author:"Ben", TaggedEmails:"megan@contoso.com", CreatedAt:"2025-09-10T14:40:00" },
+      { CommentID:"C-102", ProjectID:"P-1006", CommentText:"Need stakeholder sign-off on the forecast waterfall.", Author:"Vasanth", TaggedEmails:"leadership@contoso.com", CreatedAt:"2025-10-01T09:05:00" },
+      { CommentID:"C-103", ProjectID:"P-1000", CommentText:"Suggest shifting 10% buffer to DRAM due to vendor delay.", Author:"Aleks", TaggedEmails:"finance@contoso.com; ops-team@contoso.com", CreatedAt:"2025-10-08T16:25:00" },
+    ];
+    const seedForwards = [
+      { ForwardID:"F-200", ProjectID:"P-1002", CommentID:"C-100", SentTo:"ops-team@contoso.com", Channel:"Email", SentAt:"2025-10-02T10:00:00" },
+      { ForwardID:"F-201", ProjectID:"P-1003", CommentID:"C-101", SentTo:"megan@contoso.com", Channel:"Teams", SentAt:"2025-10-05T09:30:00" }
+    ];
+
+    // ------- App State -------
+    let Projects = [];
+    let Comments = [];
+    let Forwards = [];
+
+    const qs = (sel, el=document) => el.querySelector(sel);
+    const qsa = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+
+    function initStorage() {
+      if (!localStorage.getItem(LS_KEYS.proj)) setLS(LS_KEYS.proj, seedProjects);
+      if (!localStorage.getItem(LS_KEYS.cmts)) setLS(LS_KEYS.cmts, seedComments);
+      if (!localStorage.getItem(LS_KEYS.fwd)) setLS(LS_KEYS.fwd, seedForwards);
+      Projects = getLS(LS_KEYS.proj, seedProjects);
+      Comments = getLS(LS_KEYS.cmts, seedComments);
+      Forwards = getLS(LS_KEYS.fwd, seedForwards);
+    }
+
+    // ------- Filters -------
+    function buildFilterOptions() {
+      const slProject = qs('#slProject');
+      const slOwner = qs('#slOwner');
+      const slCategory = qs('#slCategory');
+
+      const optAll = document.createElement('option');
+      optAll.value = ''; optAll.textContent = 'All projects';
+      slProject.appendChild(optAll);
+      Projects.forEach(p=>{
+        const o = document.createElement('option');
+        o.value = p.ProjectID; o.textContent = `${p.ProjectID} — ${p.ProjectName}`;
+        slProject.appendChild(o);
+      });
+
+      const owners = Array.from(new Set(Projects.map(p=>p.Owner))).sort();
+      const optO = document.createElement('option'); optO.value=''; optO.textContent='All owners'; slOwner.appendChild(optO);
+      owners.forEach(o=>{ const e=document.createElement('option'); e.textContent=o; slOwner.appendChild(e); });
+
+      const cats = Array.from(new Set(Projects.map(p=>p.Category))).sort();
+      const optC = document.createElement('option'); optC.value=''; optC.textContent='All categories'; slCategory.appendChild(optC);
+      cats.forEach(c=>{ const e=document.createElement('option'); e.textContent=c; slCategory.appendChild(e); });
+    }
+
+    function getActiveFilters() {
+      return {
+        pid: qs('#slProject').value,
+        owner: qs('#slOwner').value,
+        status: qs('#slStatus').value,
+        category: qs('#slCategory').value
+      };
+    }
+
+    function filteredProjects() {
+      const f = getActiveFilters();
+      return Projects.filter(p =>
+        (!f.pid || p.ProjectID === f.pid) &&
+        (!f.owner || p.Owner === f.owner) &&
+        (!f.status || p.Status === f.status) &&
+        (!f.category || p.Category === f.category)
+      );
+    }
+
+    // ------- KPI Rendering -------
+    function renderKpis() {
+      const rows = filteredProjects();
+      const ont = rows.filter(r=>r.Status==='On Track').length;
+      const risk = rows.filter(r=>r.Status==='At Risk').length;
+      const blk = rows.filter(r=>r.Status==='Blocked').length;
+      const avg = rows.length ? Math.round(rows.reduce((a,b)=>a+b.PercentComplete,0)/rows.length) : 0;
+      qs('#kpiOnTrack').textContent = ont;
+      qs('#kpiAtRisk').textContent = risk;
+      qs('#kpiBlocked').textContent = blk;
+      qs('#kpiPct').textContent = `${avg}%`;
+    }
+
+    // ------- Timeline Rendering -------
+    function renderTimeline() {
+      const cont = qs('#timeline');
+      cont.innerHTML = '';
+      const rows = filteredProjects();
+      if (!rows.length) { cont.innerHTML = '<div class="text-slate-500 text-sm">No projects match the current filters.</div>'; return; }
+      const minStart = new Date(Math.min(...rows.map(r=>new Date(r.StartDate))));
+      const maxEnd = new Date(Math.max(...rows.map(r=>new Date(r.TargetDate))));
+      qs('#lblDateRange').textContent = `${minStart.toISOString().slice(0,10)} → ${maxEnd.toISOString().slice(0,10)}`;
+
+      const t = qs('#tplTimelineRow');
+      rows.forEach(r=>{
+        const node = t.content.cloneNode(true);
+        const head = node.querySelector('.font-medium');
+        head.textContent = `${r.ProjectID} — ${r.ProjectName}`;
+        node.querySelector('.text-xs').textContent = `${r.Owner} • ${r.Category} • ${r.PercentComplete}%`;
+        const start = new Date(r.StartDate), end = new Date(r.TargetDate);
+        const totalMs = maxEnd - minStart;
+        const left = ((start - minStart)/totalMs)*100; const width = ((end - start)/totalMs)*100;
+        const bar = node.querySelector('.bar');
+        bar.style.left = left + '%';
+        bar.style.width = Math.max(2, width) + '%';
+        bar.classList.add(r.Status==='On Track'?'bar-ont': r.Status==='At Risk'?'bar-risk': r.Status==='Blocked'?'bar-blk':'bar-ont');
+        node.querySelector('.start').textContent = r.StartDate;
+        node.querySelector('.target').textContent = r.TargetDate;
+        cont.appendChild(node);
+      });
+    }
+
+    // ------- Comments Rendering -------
+    function renderComments() {
+      const cont = qs('#comments');
+      cont.innerHTML = '';
+      const f = getActiveFilters();
+      let rows = [...Comments];
+      if (f.pid) rows = rows.filter(c=>c.ProjectID===f.pid);
+      const q = qs('#tbSearch').value?.toLowerCase() || '';
+      if (q) rows = rows.filter(c=> (c.CommentText+" "+c.Author+" "+c.TaggedEmails).toLowerCase().includes(q));
+      rows.sort((a,b)=> new Date(b.CreatedAt) - new Date(a.CreatedAt));
+
+      const t = qs('#tplCommentRow');
+      if (!rows.length) { cont.innerHTML = '<div class="py-3 text-sm text-slate-500">No comments yet. Try adding one.</div>'; return; }
+      rows.forEach(r=>{
+        const node = t.content.cloneNode(true);
+        node.querySelector('.author').textContent = r.Author;
+        node.querySelector('.comment').textContent = r.CommentText;
+        node.querySelector('.pid').textContent = r.ProjectID;
+        node.querySelector('.emails').textContent = r.TaggedEmails || '(no tags)';
+        node.querySelector('.dt').textContent = new Date(r.CreatedAt).toLocaleString();
+        node.querySelector('.cid').textContent = r.CommentID;
+        node.querySelector('.forward').addEventListener('click', ()=> forwardComment(r));
+        cont.appendChild(node);
+      });
+    }
+
+    // ------- Forwards Rendering -------
+    function renderForwards() {
+      const cont = qs('#forwards');
+      cont.innerHTML = '';
+      const rows = [...Forwards].sort((a,b)=> new Date(b.SentAt)-new Date(a.SentAt));
+      const t = qs('#tplForwardRow');
+      if (!rows.length) { cont.innerHTML = '<div class="py-3 text-sm text-slate-500">No forwards yet.</div>'; return; }
+      rows.forEach(r=>{
+        const node = t.content.cloneNode(true);
+        node.querySelector('.channel').textContent = r.Channel;
+        node.querySelector('.to').textContent = r.SentTo;
+        node.querySelector('.pid').textContent = r.ProjectID;
+        node.querySelector('.cid').textContent = r.CommentID;
+        node.querySelector('.fid').textContent = r.ForwardID;
+        node.querySelector('.dt').textContent = new Date(r.SentAt).toLocaleString();
+        cont.appendChild(node);
+      });
+    }
+
+    // ------- Submit & Forward Actions (Simulated Write-back) -------
+    function randomId(prefix) { return `${prefix}-${Math.floor(100 + Math.random()*900)}`; }
+
+    function submitComment() {
+      const pid = qs('#tbProjectID').value || qs('#slProject').value || (Projects[0]?.ProjectID || 'P-1000');
+      const txt = qs('#tbComment').value.trim();
+      const emails = qs('#tbEmails').value.trim();
+      const author = qs('#tbAuthor').value.trim() || 'You';
+      if (!txt) { alert('Please enter a comment.'); return; }
+      const c = { CommentID: randomId('C'), ProjectID: pid, CommentText: txt, Author: author, TaggedEmails: emails, CreatedAt: new Date().toISOString() };
+      Comments.push(c); setLS(LS_KEYS.cmts, Comments);
+      // Auto-forward if channel not None and emails provided
+      const ch = qs('#slChannel').value;
+      if (ch !== 'None' && emails) {
+        const f = { ForwardID: randomId('F'), ProjectID: pid, CommentID: c.CommentID, SentTo: emails, Channel: ch, SentAt: new Date().toISOString() };
+        Forwards.push(f); setLS(LS_KEYS.fwd, Forwards);
+      }
+      qs('#tbComment').value = '';
+      renderComments(); renderForwards();
+    }
+
+    function forwardComment(c) {
+      const ch = prompt('Channel? Type Email or Teams', 'Email');
+      if (!ch) return;
+      const to = prompt('Recipients (semicolon-separated emails)', c.TaggedEmails || 'ops-team@contoso.com');
+      if (!to) return;
+      const f = { ForwardID: randomId('F'), ProjectID: c.ProjectID, CommentID: c.CommentID, SentTo: to, Channel: (ch||'Email'), SentAt: new Date().toISOString() };
+      Forwards.push(f); setLS(LS_KEYS.fwd, Forwards);
+      renderForwards();
+    }
+
+    // ------- View Toggles (Bookmarks) -------
+    function setExecView() {
+      // Executive: Show KPIs and Timeline only; hide Recent Comments and Forwards card
+      qs('#secKpi').classList.remove('hidden');
+      qsa('.card').forEach(card=> card.classList.remove('ring-2','ring-blue-600'));
+      // Hide right column cards except Add a Comment header
+      qsa('#comments, #forwards').forEach(el=> el.closest('.card').classList.add('hidden'));
+    }
+
+    function setDeepView() {
+      qs('#secKpi').classList.remove('hidden');
+      qsa('#comments, #forwards').forEach(el=> el.closest('.card').classList.remove('hidden'));
+      // Visual cue
+      qsa('.card').forEach(card=> card.classList.remove('ring-2','ring-blue-600'));
+      qsa('#comments').forEach(el=> el.closest('.card').classList.add('ring-2','ring-blue-600'));
+    }
+
+    // ------- Wiring -------
+    function wireEvents() {
+      qsa('#slProject, #slOwner, #slStatus, #slCategory').forEach(x=> x.addEventListener('change', ()=>{
+        const pid = qs('#slProject').value;
+        qs('#tbProjectID').value = pid || '';
+        renderKpis(); renderTimeline(); renderComments();
+      }));
+      qs('#tbSearch').addEventListener('input', renderComments);
+      qs('#btnSubmit').addEventListener('click', submitComment);
+      qs('#btnClearForwards').addEventListener('click', ()=>{ if(confirm('Clear forwards log?')) { Forwards = []; setLS(LS_KEYS.fwd, Forwards); renderForwards(); } });
+      qs('#btnReset').addEventListener('click', ()=>{ if(confirm('Reset demo data?')) { localStorage.removeItem(LS_KEYS.proj); localStorage.removeItem(LS_KEYS.cmts); localStorage.removeItem(LS_KEYS.fwd); initStorage(); hydrateUI(); }});
+      qs('#btnExec').addEventListener('click', setExecView);
+      qs('#btnDeep').addEventListener('click', setDeepView);
+    }
+
+    function hydrateUI() {
+      // Build options once
+      qs('#slProject').innerHTML = ''; qs('#slOwner').innerHTML = ''; qs('#slCategory').innerHTML = '';
+      buildFilterOptions();
+      // Default: select first project and mirror into the form
+      const firstPid = Projects[0]?.ProjectID || '';
+      qs('#slProject').value = firstPid; qs('#tbProjectID').value = firstPid;
+      renderKpis(); renderTimeline(); renderComments(); renderForwards();
+      setDeepView();
+    }
+
+    // ------- Boot -------
+    initStorage();
+    wireEvents();
+    hydrateUI();
+  </script>
+</body>
+</html>
